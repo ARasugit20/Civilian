@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { motion, useInView, useAnimation } from "framer-motion";
 import Nav from "../components/Nav";
@@ -19,12 +19,21 @@ function useCounter(end, duration = 2000) {
   const inView = useInView(ref, { once: true });
   useEffect(() => {
     if (!inView) return;
+    if (end <= 0) {
+      setCount(0);
+      return;
+    }
+    setCount(0);
     let start = 0;
     const step = end / (duration / 16);
     const timer = setInterval(() => {
       start += step;
-      if (start >= end) { setCount(end); clearInterval(timer); }
-      else setCount(Math.floor(start));
+      if (start >= end) {
+        setCount(end);
+        clearInterval(timer);
+      } else {
+        setCount(Math.floor(start));
+      }
     }, 16);
     return () => clearInterval(timer);
   }, [inView, end, duration]);
@@ -45,6 +54,7 @@ const ANALYSIS_ROWS = [
 function DemoWidget() {
   const ref = useRef(null);
   const inView = useInView(ref, { once: true, margin: "-100px" });
+  const runDemoRef = useRef(null);
   const [step, setStep] = useState(0); // 0=idle,1=typing,2=analyzing,3=letter,4=sent
   const [typedText, setTypedText] = useState("");
   const [typedLocation, setTypedLocation] = useState("");
@@ -111,10 +121,29 @@ function DemoWidget() {
     typeChar();
   }
 
+  runDemoRef.current = runDemo;
+
+  const demoStarted = useRef(false);
+
   useEffect(() => {
-    if (inView && step === 0) runDemo();
+    if (!inView) return undefined;
+    if (!demoStarted.current) {
+      demoStarted.current = true;
+      runDemoRef.current?.();
+    }
     return clearTimers;
   }, [inView]);
+
+  // If intersection never fires (layout, slow paint), still start the demo after a short delay.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (!demoStarted.current) {
+        demoStarted.current = true;
+        runDemoRef.current?.();
+      }
+    }, 2000);
+    return () => clearTimeout(t);
+  }, []);
 
   const stepLabels = ["Describe", "AI Analyzes", "Letter Written", "Sent"];
 
@@ -330,12 +359,14 @@ function HealthScoreWidget() {
 }
 
 // ── Main Page ────────────────────────────────────────────────────────────────
+function isResolvedStatus(s) {
+  const x = String(s || "").toLowerCase();
+  return x === "resolved" || x.includes("resolved");
+}
+
 export default function HomePage() {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const voices = useCounter(2847);
-  const letters = useCounter(143);
-  const resolved = useCounter(12);
 
   useEffect(() => {
     fetch("/api/posts")
@@ -344,8 +375,26 @@ export default function HomePage() {
       .catch(() => setLoading(false));
   }, []);
 
-  const totalVoices = posts.reduce((s, p) => s + (p.echo_count || 0), 0) +
-    FORUM_THREADS.reduce((s, t) => s + (t.support || 0), 0);
+  const { totalVoices, totalLetters, totalResolved } = useMemo(() => {
+    const db = Array.isArray(posts) ? posts : [];
+    const threadVoices = FORUM_THREADS.reduce((s, t) => s + (Number(t.support) || 0), 0);
+    const dbVoices = db.reduce((s, p) => s + (Number(p.echo_count) || 0), 0);
+    const voices = threadVoices + dbVoices;
+
+    const letters =
+      db.filter((p) => (p.formal_request && String(p.formal_request).trim()) || p.complaint).length +
+      FORUM_THREADS.filter((t) => t.text).length;
+
+    const resolvedDb = db.filter((p) => isResolvedStatus(p.status)).length;
+    const resolvedDemo = FORUM_THREADS.filter((t) => isResolvedStatus(t.status) || t.gov_response).length;
+    const resolved = resolvedDb + resolvedDemo;
+
+    return { totalVoices: voices, totalLetters: letters, totalResolved: resolved };
+  }, [posts]);
+
+  const voices = useCounter(totalVoices, 1200);
+  const letters = useCounter(totalLetters, 1200);
+  const resolved = useCounter(totalResolved, 1200);
 
   return (
     <div style={{ background: "var(--bg)", minHeight: "100vh" }}>
@@ -386,7 +435,7 @@ export default function HomePage() {
 
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.65, duration: 0.5 }}
             style={{ display: "inline-flex", alignItems: "center", gap: 24, padding: "14px 24px", borderRadius: 14, border: "1px solid var(--border)", background: "var(--surface)", boxShadow: "var(--card-shadow)", fontSize: 14 }}>
-            {[[loading ? "—" : totalVoices.toLocaleString(), "voices raised"], ["143", "letters sent"], ["12", "issues resolved"]].map(([val, lbl], i) => (
+            {[[loading ? "—" : totalVoices.toLocaleString(), "voices raised"], [loading ? "—" : totalLetters.toLocaleString(), "letters sent"], [loading ? "—" : totalResolved.toLocaleString(), "issues resolved"]].map(([val, lbl], i) => (
               <span key={i} style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--muted)" }}>
                 {i > 0 && <span style={{ width: 1, height: 16, background: "var(--border)", marginRight: 18 }} />}
                 <strong style={{ color: "var(--text)" }}>{val}</strong> {lbl}

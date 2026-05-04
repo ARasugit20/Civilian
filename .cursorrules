@@ -1,0 +1,47 @@
+This is Civilian — a civic engagement web app.
+
+Tech stack:
+- Next.js 16, Pages Router (NOT App Router)
+- React 19
+- Tailwind CSS 4
+- InsForge for database (lib/insforge.js) — NOT Supabase, NOT Prisma
+- NextAuth.js v5 for authentication (when you implement auth — not required for unrelated tasks)
+- Anthropic Claude SDK for AI features
+- Mapbox + react-map-gl for maps
+- Framer Motion for animations
+- Resend for email
+
+Environment variables — use ONLY these names (lib/insforge.js and .env.example):
+- NEXT_PUBLIC_INSFORGE_BASE_URL
+- NEXT_PUBLIC_INSFORGE_ANON_KEY
+Do NOT use INSFORGE_API_KEY, INSFORGE_PROJECT_URL, INSFORGE_URL, or INSFORGE_ANON_KEY unless you are migrating the codebase intentionally.
+
+---
+
+## Already completed (do NOT re-implement or overwrite)
+
+Session 1 — Project context for Cursor:
+- This .cursorrules file exists with Civilian stack constraints.
+
+Session 2 — Shipped in the repo (leave intact unless a task explicitly asks to change that area):
+- pages/forum.js: echo localStorage uses echoed_posts only; one-time migration from legacy echoedPosts; 30s polling of /api/posts for the feed.
+- pages/index.js: live homepage stats from API + FORUM_THREADS; useCounter handles end <= 0; DemoWidget has inView + 2s fallback and single-start guard (demoStarted ref).
+- pages/api/posts.js: GET always returns a JSON array (normalized + fallback posts).
+- pages/api/waitlist.js: POST waitlist endpoint (InsForge waitlist table; fail-open if table missing).
+- docs/insforge-schema.sql: optional SQL for profiles, echoes, status_history, waitlist, notifications, post columns.
+- .env.example: documents real InsForge var names and other keys.
+- pages/_document.js: default SEO meta (title, description, og, twitter).
+
+When working on new tasks: do NOT redo the above unless the user explicitly asks to modify those files for a regression or redesign. Prefer extending alongside existing patterns.
+
+---
+
+Rules:
+- NEVER use Supabase. The database is InsForge via lib/insforge.js.
+- NEVER switch to the App Router. This is Pages Router only.
+- NEVER rewrite working files — only modify what the specific task requires.
+- ALWAYS use the existing component and lib patterns before creating new ones.
+- ALWAYS check what's already imported at the top of a file before adding new imports.
+- For auth, use NextAuth with getServerSession on the server and useSession on the client.
+- For database queries, follow the pattern already in lib/insforge.js.
+- Match the existing Tailwind + Framer Motion animation style.

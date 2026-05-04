@@ -74,7 +74,8 @@ export default async function handler(req, res) {
       const fallback = filterType ? FALLBACK_POSTS.filter(p => p.issue_type === filterType) : FALLBACK_POSTS;
       return res.status(200).json(fallback);
     }
-    return res.status(200).json(data?.length ? data : FALLBACK_POSTS);
+    const list = Array.isArray(data) ? data : [];
+    return res.status(200).json(list.length ? list : FALLBACK_POSTS);
   }
 
   if (req.method === "POST") {

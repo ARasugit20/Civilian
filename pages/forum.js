@@ -662,13 +662,35 @@ export default function ForumPage() {
   const [translatingIds, setTranslatingIds] = useState(new Set());
 
   useEffect(() => {
-    const saved = JSON.parse(localStorage.getItem("echoedPosts") || "[]");
-    setEchoedIds(new Set(saved));
+    // One-time migration: older builds used "echoedPosts"; canonical key is "echoed_posts" (matches post detail + profile).
+    try {
+      const legacy = JSON.parse(localStorage.getItem("echoedPosts") || "[]");
+      const primary = JSON.parse(localStorage.getItem("echoed_posts") || "[]");
+      const leg = Array.isArray(legacy) ? legacy : [];
+      const pri = Array.isArray(primary) ? primary : [];
+      if (leg.length) {
+        const merged = [...new Set([...pri, ...leg].map(String))];
+        localStorage.setItem("echoed_posts", JSON.stringify(merged));
+        localStorage.removeItem("echoedPosts");
+        setEchoedIds(new Set(merged));
+      } else {
+        setEchoedIds(new Set(pri.map(String)));
+      }
+    } catch {
+      setEchoedIds(new Set());
+    }
     setMounted(true);
-    fetch("/api/posts?sort=new")
-      .then(r => r.json())
-      .then(d => { setPosts(Array.isArray(d) ? d : []); setLoading(false); })
-      .catch(() => setLoading(false));
+    function loadFeed() {
+      fetch("/api/posts?sort=new")
+        .then(r => r.json())
+        .then(d => {
+          setPosts(Array.isArray(d) ? d : []);
+          setLoading(false);
+        })
+        .catch(() => setLoading(false));
+    }
+    loadFeed();
+    const poll = setInterval(loadFeed, 30000);
     setIsOnline(navigator.onLine);
     const onOnline = () => setIsOnline(true);
     const onOffline = () => setIsOnline(false);
@@ -707,7 +729,11 @@ export default function ForumPage() {
       );
     }
 
-    return () => { window.removeEventListener("online", onOnline); window.removeEventListener("offline", onOffline); };
+    return () => {
+      clearInterval(poll);
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
   }, []);
 
   async function translatePost(postId, text, targetLang) {
@@ -735,7 +761,7 @@ export default function ForumPage() {
     setEchoedIds(prev => {
       const next = new Set(prev);
       next.add(id);
-      localStorage.setItem("echoedPosts", JSON.stringify([...next]));
+      localStorage.setItem("echoed_posts", JSON.stringify([...next]));
       return next;
     });
     setToast({ message: "Voice added!", type: "success" });
