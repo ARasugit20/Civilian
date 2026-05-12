@@ -154,12 +154,12 @@ cd ClaudeHacks/civic-app
 npm install
 ```
 
-Create `.env.local`:
+Create `.env.local` (see `.env.example` and `docs/MANUAL_SETUP.md`):
 
 ```env
+NEXT_PUBLIC_INSFORGE_BASE_URL=https://your-project.insforge.app
+NEXT_PUBLIC_INSFORGE_ANON_KEY=your_insforge_anon_key
 ANTHROPIC_API_KEY=your_anthropic_key
-INSFORGE_URL=https://your-project.insforge.app
-INSFORGE_ANON_KEY=your_insforge_anon_key
 RESEND_API_KEY=your_resend_key
 NEXT_PUBLIC_MAPBOX_TOKEN=your_mapbox_token
 ```

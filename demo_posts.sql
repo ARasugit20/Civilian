@@ -1,3 +1,4 @@
+-- WARNING: deletes every row in posts. Use only on an empty or disposable database.
 DELETE FROM posts;
 
 INSERT INTO posts (complaint, formal_request, department, official_name, official_email, issue_type, location, lat, lng, echo_count, status, resolved_at, resolution_note) VALUES

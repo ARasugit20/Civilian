@@ -1,9 +1,8 @@
-"use client";
 import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
-import { motion, useInView, useAnimation } from "framer-motion";
+import { motion, useInView } from "framer-motion";
 import Nav from "../components/Nav";
-import { FORUM_THREADS } from "../lib/civicData";
+import { computeHomeStats, neighborhoodHealthScore } from "../lib/homeStats";
 
 // ── Animation variants ───────────────────────────────────────────────────────
 const fadeUp = {
@@ -13,30 +12,34 @@ const fadeUp = {
 const stagger = { visible: { transition: { staggerChildren: 0.12 } } };
 
 // ── Animated counter hook ────────────────────────────────────────────────────
-function useCounter(end, duration = 2000) {
-  const [count, setCount] = useState(0);
+function useCounter(end, duration = 2000, { startOnMount = false } = {}) {
+  const safeEnd = Math.max(0, Number(end) || 0);
+  const [count, setCount] = useState(safeEnd);
   const ref = useRef(null);
-  const inView = useInView(ref, { once: true });
+  const inView = useInView(ref, { once: true, margin: "-80px" });
+  const shouldAnimate = startOnMount || inView;
+
   useEffect(() => {
-    if (!inView) return;
-    if (end <= 0) {
+    if (!shouldAnimate) return undefined;
+    if (safeEnd <= 0) {
       setCount(0);
-      return;
+      return undefined;
     }
     setCount(0);
     let start = 0;
-    const step = end / (duration / 16);
+    const step = safeEnd / (duration / 16);
     const timer = setInterval(() => {
       start += step;
-      if (start >= end) {
-        setCount(end);
+      if (start >= safeEnd) {
+        setCount(safeEnd);
         clearInterval(timer);
       } else {
         setCount(Math.floor(start));
       }
     }, 16);
     return () => clearInterval(timer);
-  }, [inView, end, duration]);
+  }, [shouldAnimate, safeEnd, duration]);
+
   return { count, ref };
 }
 
@@ -125,25 +128,22 @@ function DemoWidget() {
 
   const demoStarted = useRef(false);
 
+  function startDemoOnce() {
+    if (demoStarted.current) return;
+    demoStarted.current = true;
+    runDemoRef.current?.();
+  }
+
+  useEffect(() => {
+    startDemoOnce();
+    return clearTimers;
+  }, []);
+
   useEffect(() => {
     if (!inView) return undefined;
-    if (!demoStarted.current) {
-      demoStarted.current = true;
-      runDemoRef.current?.();
-    }
-    return clearTimers;
+    startDemoOnce();
+    return undefined;
   }, [inView]);
-
-  // If intersection never fires (layout, slow paint), still start the demo after a short delay.
-  useEffect(() => {
-    const t = setTimeout(() => {
-      if (!demoStarted.current) {
-        demoStarted.current = true;
-        runDemoRef.current?.();
-      }
-    }, 2000);
-    return () => clearTimeout(t);
-  }, []);
 
   const stepLabels = ["Describe", "AI Analyzes", "Letter Written", "Sent"];
 
@@ -270,7 +270,7 @@ function DemoWidget() {
 
       {/* Idle state */}
       {step === 0 && (
-        <div style={{ textAlign: "center", padding: "40px 0", color: "#8b949e", fontSize: 14 }}>Loading demo...</div>
+        <div style={{ textAlign: "center", padding: "40px 0", color: "#8b949e", fontSize: 14 }}>Preparing demo…</div>
       )}
 
       {/* Bottom CTAs */}
@@ -329,8 +329,8 @@ const BENTO = [
 ];
 
 // ── Neighborhood Health Score Widget ────────────────────────────────────────
-function HealthScoreWidget() {
-  const { count: score, ref } = useCounter(74, 1800);
+function HealthScoreWidget({ targetScore }) {
+  const { count: score, ref } = useCounter(targetScore, 1800, { startOnMount: true });
   const healthColor = score >= 80 ? "#22c55e" : score >= 60 ? "#f59e0b" : "#ef4444";
   const label = score >= 80 ? "Healthy" : score >= 60 ? "Needs Attention" : "Critical";
   return (
@@ -359,11 +359,6 @@ function HealthScoreWidget() {
 }
 
 // ── Main Page ────────────────────────────────────────────────────────────────
-function isResolvedStatus(s) {
-  const x = String(s || "").toLowerCase();
-  return x === "resolved" || x.includes("resolved");
-}
-
 export default function HomePage() {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -375,26 +370,14 @@ export default function HomePage() {
       .catch(() => setLoading(false));
   }, []);
 
-  const { totalVoices, totalLetters, totalResolved } = useMemo(() => {
-    const db = Array.isArray(posts) ? posts : [];
-    const threadVoices = FORUM_THREADS.reduce((s, t) => s + (Number(t.support) || 0), 0);
-    const dbVoices = db.reduce((s, p) => s + (Number(p.echo_count) || 0), 0);
-    const voices = threadVoices + dbVoices;
+  const baselineStats = useMemo(() => computeHomeStats([]), []);
+  const liveStats = useMemo(() => computeHomeStats(posts), [posts]);
+  const displayStats = loading ? baselineStats : liveStats;
+  const healthScore = neighborhoodHealthScore(displayStats.unresolvedCount);
 
-    const letters =
-      db.filter((p) => (p.formal_request && String(p.formal_request).trim()) || p.complaint).length +
-      FORUM_THREADS.filter((t) => t.text).length;
-
-    const resolvedDb = db.filter((p) => isResolvedStatus(p.status)).length;
-    const resolvedDemo = FORUM_THREADS.filter((t) => isResolvedStatus(t.status) || t.gov_response).length;
-    const resolved = resolvedDb + resolvedDemo;
-
-    return { totalVoices: voices, totalLetters: letters, totalResolved: resolved };
-  }, [posts]);
-
-  const voices = useCounter(totalVoices, 1200);
-  const letters = useCounter(totalLetters, 1200);
-  const resolved = useCounter(totalResolved, 1200);
+  const voices = useCounter(displayStats.totalVoices, 1200, { startOnMount: true });
+  const letters = useCounter(displayStats.totalLetters, 1200, { startOnMount: true });
+  const resolved = useCounter(displayStats.totalResolved, 1200, { startOnMount: true });
 
   return (
     <div style={{ background: "var(--bg)", minHeight: "100vh" }}>
@@ -435,7 +418,7 @@ export default function HomePage() {
 
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.65, duration: 0.5 }}
             style={{ display: "inline-flex", alignItems: "center", gap: 24, padding: "14px 24px", borderRadius: 14, border: "1px solid var(--border)", background: "var(--surface)", boxShadow: "var(--card-shadow)", fontSize: 14 }}>
-            {[[loading ? "—" : totalVoices.toLocaleString(), "voices raised"], [loading ? "—" : totalLetters.toLocaleString(), "letters sent"], [loading ? "—" : totalResolved.toLocaleString(), "issues resolved"]].map(([val, lbl], i) => (
+            {[[displayStats.totalVoices.toLocaleString(), "voices raised"], [displayStats.totalLetters.toLocaleString(), "letters sent"], [displayStats.totalResolved.toLocaleString(), "issues resolved"]].map(([val, lbl], i) => (
               <span key={i} style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--muted)" }}>
                 {i > 0 && <span style={{ width: 1, height: 16, background: "var(--border)", marginRight: 18 }} />}
                 <strong style={{ color: "var(--text)" }}>{val}</strong> {lbl}
@@ -582,7 +565,7 @@ export default function HomePage() {
 
             {/* Neighborhood Health Score */}
             <motion.div variants={fadeUp} style={{ marginBottom: 48 }}>
-              <HealthScoreWidget />
+              <HealthScoreWidget targetScore={healthScore} />
             </motion.div>
 
             {/* Quote */}
