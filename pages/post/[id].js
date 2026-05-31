@@ -6,6 +6,7 @@ import Toast from "../../components/Toast";
 import EchoConsentDialog from "../../components/EchoConsentDialog";
 import PostSidebar from "../../components/PostSidebar";
 import { FORUM_THREADS } from "../../lib/civicData";
+import { echoFetchHeaders } from "../../lib/clientEchoId";
 
 const TYPE_LABELS = {
   traffic_safety:   { label: "Traffic Safety",   cls: "type-traffic"  },
@@ -261,7 +262,11 @@ export default function PostPage() {
     }
     localStorage.setItem(`civilian_consent_${id}`, "true");
     localStorage.setItem("echoed_posts", JSON.stringify([...saved, String(id)]));
-    await fetch("/api/echo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, alreadyEchoed: false }) });
+    await fetch("/api/echo", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...echoFetchHeaders() },
+      body: JSON.stringify({ id, alreadyEchoed: false }),
+    });
     setPost(p => ({ ...p, echo_count: p.echo_count + 1 }));
     setEchoed(true);
     setToast({ message: "Your voice has been added!", type: "success" });

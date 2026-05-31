@@ -14,7 +14,7 @@ const stagger = { visible: { transition: { staggerChildren: 0.12 } } };
 // ── Animated counter hook ────────────────────────────────────────────────────
 function useCounter(end, duration = 2000, { startOnMount = false } = {}) {
   const safeEnd = Math.max(0, Number(end) || 0);
-  const [count, setCount] = useState(safeEnd);
+  const [count, setCount] = useState(0);
   const ref = useRef(null);
   const inView = useInView(ref, { once: true, margin: "-80px" });
   const shouldAnimate = startOnMount || inView;
@@ -370,9 +370,7 @@ export default function HomePage() {
       .catch(() => setLoading(false));
   }, []);
 
-  const baselineStats = useMemo(() => computeHomeStats([]), []);
-  const liveStats = useMemo(() => computeHomeStats(posts), [posts]);
-  const displayStats = loading ? baselineStats : liveStats;
+  const displayStats = useMemo(() => computeHomeStats(posts), [posts]);
   const healthScore = neighborhoodHealthScore(displayStats.unresolvedCount);
 
   const voices = useCounter(displayStats.totalVoices, 1200, { startOnMount: true });

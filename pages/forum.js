@@ -3,6 +3,7 @@ import Link from "next/link";
 import Nav from "../components/Nav";
 import Toast from "../components/Toast";
 import { ISSUE_COLORS, FORUM_THREADS } from "../lib/civicData";
+import { echoFetchHeaders } from "../lib/clientEchoId";
 import EchoConsentDialog from "../components/EchoConsentDialog";
 
 const LANG_NAMES = {
@@ -237,7 +238,13 @@ function PostModal({ post, echoedIds, onEcho, onClose, onToast }) {
     localStorage.setItem(`civilian_consent_${post.id}`, "true");
     localStorage.setItem("echoed_posts", JSON.stringify([...saved, String(post.id)]));
     if (!isDemo) {
-      try { await fetch("/api/echo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: post.id, alreadyEchoed: false }) }); } catch {}
+      try {
+        await fetch("/api/echo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...echoFetchHeaders() },
+          body: JSON.stringify({ id: post.id, alreadyEchoed: false }),
+        });
+      } catch {}
     }
   }
 
@@ -514,7 +521,13 @@ function PostCard({ post, index, echoedIds, onEcho, onShare, onOpenModal, viewer
     localStorage.setItem(`civilian_consent_${post.id}`, "true");
     localStorage.setItem("echoed_posts", JSON.stringify([...saved, String(post.id)]));
     if (!isDemo) {
-      try { await fetch("/api/echo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: post.id, alreadyEchoed: false }) }); } catch {}
+      try {
+        await fetch("/api/echo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...echoFetchHeaders() },
+          body: JSON.stringify({ id: post.id, alreadyEchoed: false }),
+        });
+      } catch {}
     }
   }
 

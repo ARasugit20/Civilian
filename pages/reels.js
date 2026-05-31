@@ -3,6 +3,7 @@ import Link from "next/link";
 import Nav from "../components/Nav";
 import Toast from "../components/Toast";
 import { ISSUE_COLORS } from "../lib/civicData";
+import { echoFetchHeaders } from "../lib/clientEchoId";
 
 const ISSUE_IMAGES = {
   traffic_safety:   "https://images.unsplash.com/photo-1449824913935-59a10b8d2000?w=800",
@@ -97,7 +98,13 @@ export default function ReelsPage() {
     setReels(prev => prev.map(r => r.id === reelId ? { ...r, echo_count: (r.echo_count || 0) + 1 } : r));
     setToast({ message: "Voice added!", type: "success" });
     if (!String(reelId).startsWith("demo")) {
-      try { await fetch("/api/echo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: reelId }) }); } catch {}
+      try {
+        await fetch("/api/echo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...echoFetchHeaders() },
+          body: JSON.stringify({ id: reelId }),
+        });
+      } catch {}
     }
   }
 

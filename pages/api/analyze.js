@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { rateLimit, getClientIp } from "../../lib/rateLimit";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -174,6 +175,17 @@ function sanitizeResponse(data) {
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
+
+  const maxPerWindow = Number(process.env.ANALYZE_RATE_LIMIT_MAX) || 8;
+  const windowMs = Number(process.env.ANALYZE_RATE_LIMIT_WINDOW_MS) || 60_000;
+  const rl = rateLimit(`analyze:${getClientIp(req)}`, { max: maxPerWindow, windowMs });
+  if (rl.limited) {
+    return res.status(429).json({
+      error: "rate_limited",
+      message: "Too many analysis requests. Please wait a minute and try again.",
+      retryAfterMs: rl.retryAfterMs,
+    });
+  }
 
   const { complaint, location, imageBase64, imageMediaType, language, highSensitivity } = req.body;
 

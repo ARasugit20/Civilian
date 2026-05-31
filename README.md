@@ -13,7 +13,9 @@
 <br/>
 
 [![Live Demo](https://img.shields.io/badge/🌐%20Live%20Demo-civic--app--nine.vercel.app-22c55e?style=for-the-badge)](https://civic-app-nine.vercel.app)
-[![GitHub](https://img.shields.io/badge/GitHub-sgupt354%2FClaudeHacks-181717?style=for-the-badge&logo=github)](https://github.com/sgupt354/ClaudeHacks)
+[![GitHub](https://img.shields.io/badge/GitHub-ARasugit20%2FCivilian-181717?style=for-the-badge&logo=github)](https://github.com/ARasugit20/Civilian)
+
+**Portfolio maintainer:** [Aditya Ranjan](https://github.com/ARasugit20) · **Origin:** built for [HackASU](https://github.com/sgupt354/ClaudeHacks) (team prototype), evolved into production civic app at [gocivilian.org](https://www.gocivilian.org).
 
 </div>
 
@@ -75,9 +77,22 @@ Civilian was built with a deliberate commitment to not making existing inequalit
 
 **🛡️ Intent-based moderation, not keyword policing** — The system understands that a frustrated resident venting about a dangerous road is not the same as someone being abusive. It asks one question: *is this message appropriate to send to a government official?* Legitimate civic frustration passes. Actual abuse doesn't.
 
-**🔒 No personal data required** — No accounts, no sign-ups. The barrier to participation is as low as possible.
+**🔒 Privacy-first posting** — Google sign-in is optional; anonymous posting still works. No PII required to raise an issue.
 
-**🔓 Fail-open design** — If any AI service is unavailable, the system defaults to allowing the complaint through. Civic participation is never silently blocked by a technical failure.
+**🔓 Fail-open design** — If moderation or translation APIs are unavailable, the system defaults to allowing the complaint through. Civic participation is never silently blocked by a technical failure.
+
+---
+
+## 🔐 Security & reliability
+
+| Control | Implementation |
+|---|---|
+| Analyze rate limit | In-memory per-IP window on `POST /api/analyze` (default 8/min). Set `ANALYZE_RATE_LIMIT_MAX` / `ANALYZE_RATE_LIMIT_WINDOW_MS`. Use Redis/Upstash at scale. |
+| Echo deduplication | `echoes` table `UNIQUE(post_id, user_id)` + `X-Civilian-Fingerprint` / session id |
+| Moderation | Intent-based Claude Haiku; **fail-open** on outage (see `lib/moderation.js`, `tests/moderation.test.js`) |
+| Secrets | Never commit `.env.local`; see `.env.example` |
+
+Architecture diagram: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 
 ---
 
@@ -149,12 +164,12 @@ Civilian was built with a deliberate commitment to not making existing inequalit
 ### Install & Run
 
 ```bash
-git clone https://github.com/sgupt354/ClaudeHacks.git
-cd ClaudeHacks/civic-app
+git clone https://github.com/ARasugit20/Civilian.git
+cd Civilian
 npm install
 ```
 
-Create `.env.local` (see `.env.example` and `docs/MANUAL_SETUP.md`):
+Create `.env.local` (see `.env.example` and [`docs/MANUAL_SETUP.md`](docs/MANUAL_SETUP.md)):
 
 ```env
 NEXT_PUBLIC_INSFORGE_BASE_URL=https://your-project.insforge.app
@@ -162,11 +177,17 @@ NEXT_PUBLIC_INSFORGE_ANON_KEY=your_insforge_anon_key
 ANTHROPIC_API_KEY=your_anthropic_key
 RESEND_API_KEY=your_resend_key
 NEXT_PUBLIC_MAPBOX_TOKEN=your_mapbox_token
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=generate_a_random_string
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
 ```
 
 ```bash
 npm run dev
 # open http://localhost:3000
+npm run test    # vitest — moderation, echo, stats
+npm run build
 ```
 
 ### Database Schema
@@ -215,7 +236,15 @@ civic-app/
 │   ├── Nav.js
 │   └── Toast.js
 ├── lib/
-│   └── insforge.js       # Database client
+│   ├── insforge.js       # Database client + profile upsert
+│   ├── auth.js            # NextAuth (Google)
+│   ├── moderation.js      # Intent moderation helpers
+│   ├── rateLimit.js       # Analyze rate limiting
+│   └── homeStats.js       # Homepage aggregates
+├── tests/                 # vitest unit tests
+├── docs/
+│   ├── ARCHITECTURE.md
+│   └── MANUAL_SETUP.md
 └── styles/
     └── globals.css
 ```
@@ -224,7 +253,7 @@ civic-app/
 
 <div align="center">
 
-Built with care for HackASU.
+Built for **HackASU** · maintained by **Aditya Ranjan** as a portfolio piece.
 
 *Every resident deserves to have their voice heard by the right person, in the right format, with their community behind them.*
 

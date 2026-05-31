@@ -1,6 +1,7 @@
 import "../styles/globals.css";
 import { createContext, useContext, useEffect, useState } from "react";
 import Head from "next/head";
+import { SessionProvider } from "next-auth/react";
 import Footer from "../components/Footer";
 import OnboardingModal from "../components/OnboardingModal";
 
@@ -35,6 +36,7 @@ export default function App({ Component, pageProps }) {
   }
 
   return (
+    <SessionProvider session={pageProps.session}>
     <ThemeContext.Provider value={{ theme, toggleTheme }}>
       <Head>
         <link rel="manifest" href="/manifest.json" />
@@ -51,5 +53,6 @@ export default function App({ Component, pageProps }) {
       </div>
       <OnboardingModal />
     </ThemeContext.Provider>
+    </SessionProvider>
   );
 }

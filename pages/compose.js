@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
+import { useSession } from "next-auth/react";
 import Nav from "../components/Nav";
+import AuthModal from "../components/AuthModal";
 
 const LOADING_STEPS = [
   { text: "Reading your complaint...",      color: "#6366f1" },
@@ -284,6 +286,8 @@ function RightPanel() {
 
 export default function Compose() {
   const router = useRouter();
+  const { status } = useSession();
+  const [showAuth, setShowAuth] = useState(false);
   const [complaint, setComplaint] = useState("");
   const [location, setLocation] = useState("");
   const [locationTouched, setLocationTouched] = useState(false);
@@ -375,7 +379,12 @@ export default function Compose() {
       setLocationError("Location is required so we can route your complaint to the right official.");
       hasError = true;
     }
-    if (hasError) return; // HARD STOP — no API calls
+    if (hasError) return;
+
+    if (status !== "authenticated") {
+      setShowAuth(true);
+      return;
+    }
 
     // Show loading only after validation passes
     setLoading(true);
@@ -1199,6 +1208,7 @@ function ResultPage({ result, router }) {
           </div>
         </div>
       )}
+      <AuthModal isOpen={showAuth} onClose={() => setShowAuth(false)} callbackUrl="/compose" />
     </div>
   );
 }
