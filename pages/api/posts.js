@@ -1,3 +1,4 @@
+import { auth } from "../../lib/auth";
 import { insforge } from "../../lib/insforge";
 
 const FALLBACK_POSTS = [
@@ -32,50 +33,62 @@ async function geocodeLocation(location) {
 
 export default async function handler(req, res) {
   if (req.method === "GET") {
-    const { id } = req.query;
+    const { id, user_id: userId, echoed, issue_type: filterType } = req.query;
 
     if (id) {
-      // Serve fallback posts directly without hitting DB
-      if (id.startsWith("fallback-")) {
-        const post = FALLBACK_POSTS.find(p => p.id === id);
+      if (String(id).startsWith("fallback-")) {
+        const post = FALLBACK_POSTS.find((p) => p.id === id);
         if (post) return res.status(200).json(post);
         return res.status(404).json({ error: "Not found" });
       }
 
-      const { data, error } = await insforge.database
-        .from("posts")
-        .select("*")
-        .eq("id", id)
-        .single();
+      const { data, error } = await insforge.database.from("posts").select("*").eq("id", id).single();
       if (error) {
-        const post = FALLBACK_POSTS.find(p => p.id === id);
+        const post = FALLBACK_POSTS.find((p) => p.id === id);
         if (post) return res.status(200).json(post);
         return res.status(404).json({ error: "Post not found" });
       }
       return res.status(200).json(data);
     }
 
-    const { issue_type: filterType } = req.query;
+    if (echoed === "1") {
+      const session = await auth(req, res);
+      if (!session?.user?.id) return res.status(200).json([]);
 
-    let query = insforge.database
-      .from("posts")
-      .select("*");
+      const { data: echoRows, error: echoError } = await insforge.database
+        .from("echoes")
+        .select("post_id")
+        .eq("user_id", session.user.id);
+
+      if (echoError || !echoRows?.length) return res.status(200).json([]);
+
+      const postIds = echoRows.map((row) => row.post_id).filter(Boolean);
+      if (!postIds.length) return res.status(200).json([]);
+
+      const echoedPosts = [];
+      for (const postId of postIds) {
+        const { data: post } = await insforge.database.from("posts").select("*").eq("id", postId).maybeSingle();
+        if (post) echoedPosts.push(post);
+      }
+      return res.status(200).json(echoedPosts);
+    }
+
+    let query = insforge.database.from("posts").select("*");
 
     const sort = req.query.sort || "new";
     if (sort === "trending") query = query.order("echo_count", { ascending: false });
     else if (sort === "urgent") query = query.order("urgency_score", { ascending: false });
-    else query = query.order("created_at", { ascending: false }); // default: new
+    else query = query.order("created_at", { ascending: false });
 
     if (filterType) query = query.eq("issue_type", filterType);
+    if (userId) query = query.eq("user_id", userId);
 
     const { data, error } = await query;
     if (error) {
-      console.warn("DB unavailable, using fallback posts:", error.message);
-      const fallback = filterType ? FALLBACK_POSTS.filter(p => p.issue_type === filterType) : FALLBACK_POSTS;
-      return res.status(200).json(fallback);
+      console.warn("DB unavailable for posts:", error.message);
+      return res.status(200).json([]);
     }
-    const list = Array.isArray(data) ? data : [];
-    return res.status(200).json(list.length ? list : FALLBACK_POSTS);
+    return res.status(200).json(Array.isArray(data) ? data : []);
   }
 
   if (req.method === "POST") {
@@ -91,7 +104,6 @@ export default async function handler(req, res) {
       urgency_score,
     } = req.body;
 
-    // Geocode the location to get real coordinates
     const { lat, lng } = await geocodeLocation(location || "Tempe, Arizona");
 
     const newPost = {
@@ -110,13 +122,15 @@ export default async function handler(req, res) {
       urgency_score: urgency_score ? Number(urgency_score) : null,
     };
 
-    try {
-      const { data, error } = await insforge.database
-        .from("posts")
-        .insert([newPost])
-        .select()
-        .single();
+    const session = await auth(req, res);
+    if (session?.user?.id) {
+      newPost.user_id = session.user.id;
+      newPost.user_display_name = session.user.name || null;
+      newPost.user_avatar = session.user.image || null;
+    }
 
+    try {
+      const { data, error } = await insforge.database.from("posts").insert([newPost]).select().single();
       if (error) throw new Error(error.message);
       return res.status(200).json(data);
     } catch (err) {
