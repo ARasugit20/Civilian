@@ -1,18 +1,10 @@
 import { auth } from "../../lib/auth";
 import { insforge } from "../../lib/insforge";
-
-const FALLBACK_POSTS = [
-  { id: "fallback-1", complaint: "The crosswalk at Mill Ave and University Dr has no lighting. Kids nearly get hit every morning walking to school.", issue_type: "traffic_safety", location: "Mill Ave & University Dr, Tempe", echo_count: 34, status: "pending", lat: 33.4255, lng: -111.9400, author_name: "Maria Santos", author_role: "Parent & Resident", urgency_score: 9, created_at: new Date().toISOString() },
-  { id: "fallback-2", complaint: "Three streetlights on Rural Road near the library have been out for 6 weeks. Seniors avoid walking at night.", issue_type: "street_lighting", location: "Rural Road near Library, Tempe", echo_count: 22, status: "sent", lat: 33.4142, lng: -111.9268, author_name: "James Thompson", author_role: "Business Owner", urgency_score: 7, created_at: new Date().toISOString() },
-  { id: "fallback-3", complaint: "Kiwanis Park has no shade. Playground equipment reaches 160F in summer. Kids cannot play there at all.", issue_type: "parks_facilities", location: "Kiwanis Park, Tempe", echo_count: 48, status: "resolved", lat: 33.3964, lng: -111.9194, author_name: "Chen Wei", author_role: "Graduate Student", urgency_score: 6, created_at: new Date().toISOString() },
-  { id: "fallback-4", complaint: "Massive pothole on Apache Blvd near Price Rd has been there 3 months. Already damaged 5 tires this week.", issue_type: "road_maintenance", location: "Apache Blvd & Price Rd, Tempe", echo_count: 31, status: "pending", lat: 33.4157, lng: -111.9185, author_name: "Roberto Garcia", author_role: "Homeowner", urgency_score: 8, created_at: new Date().toISOString() },
-  { id: "fallback-5", complaint: "Late night drag racing on McClintock Dr wakes up the whole neighborhood every weekend after midnight.", issue_type: "noise_complaint", location: "McClintock Dr, Tempe", echo_count: 19, status: "pending", lat: 33.4019, lng: -111.9154, author_name: "Aisha Johnson", author_role: "Teacher", urgency_score: 5, created_at: new Date().toISOString() },
-  { id: "fallback-6", complaint: "No crosswalk on Southern Ave near the elementary school. Children are crossing a 4-lane road unsafely daily.", issue_type: "traffic_safety", location: "Southern Ave & Rural Rd, Tempe", echo_count: 47, status: "sent", lat: 33.3819, lng: -111.9268, author_name: "Sarah Mitchell", author_role: "Nurse", urgency_score: 9, created_at: new Date().toISOString() },
-  { id: "fallback-7", complaint: "Broken water main on Priest Dr has left a sinkhole growing for 2 weeks. Road is partially collapsed.", issue_type: "utilities", location: "Priest Dr, Tempe", echo_count: 23, status: "responded", lat: 33.4248, lng: -111.9558, author_name: "David Park", author_role: "Engineer", urgency_score: 10, created_at: new Date().toISOString() },
-  { id: "fallback-8", complaint: "Graffiti has covered the entire underpass on Broadway Rd. It has been there for months with no cleanup.", issue_type: "other", location: "Broadway Rd Underpass, Tempe", echo_count: 12, status: "pending", lat: 33.4019, lng: -111.9200, author_name: "Linda Nguyen", author_role: "Small Business Owner", urgency_score: 4, created_at: new Date().toISOString() },
-  { id: "fallback-9", complaint: "Tempe Town Lake path lighting is completely out for 400 meters. Joggers and cyclists at serious risk at night.", issue_type: "street_lighting", location: "Tempe Town Lake Path, Tempe", echo_count: 38, status: "pending", lat: 33.4281, lng: -111.9415, author_name: "Tyler Brooks", author_role: "College Student", urgency_score: 7, created_at: new Date().toISOString() },
-  { id: "fallback-10", complaint: "Construction noise from the ASU project on University Dr starts at 5am daily violating city noise ordinances.", issue_type: "noise_complaint", location: "University Dr & Rural Rd, Tempe", echo_count: 29, status: "pending", lat: 33.4248, lng: -111.9268, author_name: "Fatima Al-Hassan", author_role: "Retiree", urgency_score: 6, created_at: new Date().toISOString() },
-];
+import {
+  FALLBACK_POSTS,
+  withDbTimeout,
+  resolveFeedPosts,
+} from "../../lib/postsFeed";
 
 async function geocodeLocation(location) {
   try {
@@ -31,6 +23,25 @@ async function geocodeLocation(location) {
   return { lat: null, lng: null };
 }
 
+async function fetchPostsList({ sort, filterType, userId }) {
+  let query = insforge.database.from("posts").select("*");
+
+  if (sort === "trending") query = query.order("echo_count", { ascending: false });
+  else if (sort === "urgent") query = query.order("urgency_score", { ascending: false });
+  else query = query.order("created_at", { ascending: false });
+
+  if (filterType) query = query.eq("issue_type", filterType);
+  if (userId) query = query.eq("user_id", userId);
+
+  try {
+    const { data, error } = await withDbTimeout(() => query, undefined, "posts list");
+    return resolveFeedPosts({ data, error, sort, filterType, userId });
+  } catch (err) {
+    console.warn("DB unavailable for posts:", err.message);
+    return resolveFeedPosts({ data: null, error: err, sort, filterType, userId });
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method === "GET") {
     const { id, user_id: userId, echoed, issue_type: filterType } = req.query;
@@ -42,53 +53,56 @@ export default async function handler(req, res) {
         return res.status(404).json({ error: "Not found" });
       }
 
-      const { data, error } = await insforge.database.from("posts").select("*").eq("id", id).single();
-      if (error) {
+      try {
+        const { data, error } = await withDbTimeout(
+          () => insforge.database.from("posts").select("*").eq("id", id).single(),
+          undefined,
+          "post by id"
+        );
+        if (error) throw error;
+        return res.status(200).json(data);
+      } catch (err) {
         const post = FALLBACK_POSTS.find((p) => p.id === id);
         if (post) return res.status(200).json(post);
         return res.status(404).json({ error: "Post not found" });
       }
-      return res.status(200).json(data);
     }
 
     if (echoed === "1") {
       const session = await auth(req, res);
       if (!session?.user?.id) return res.status(200).json([]);
 
-      const { data: echoRows, error: echoError } = await insforge.database
-        .from("echoes")
-        .select("post_id")
-        .eq("user_id", session.user.id);
+      try {
+        const { data: echoRows, error: echoError } = await withDbTimeout(
+          () => insforge.database.from("echoes").select("post_id").eq("user_id", session.user.id),
+          undefined,
+          "echoed post ids"
+        );
 
-      if (echoError || !echoRows?.length) return res.status(200).json([]);
+        if (echoError || !echoRows?.length) return res.status(200).json([]);
 
-      const postIds = echoRows.map((row) => row.post_id).filter(Boolean);
-      if (!postIds.length) return res.status(200).json([]);
+        const postIds = echoRows.map((row) => row.post_id).filter(Boolean);
+        if (!postIds.length) return res.status(200).json([]);
 
-      const echoedPosts = [];
-      for (const postId of postIds) {
-        const { data: post } = await insforge.database.from("posts").select("*").eq("id", postId).maybeSingle();
-        if (post) echoedPosts.push(post);
+        const echoedPosts = [];
+        for (const postId of postIds) {
+          const { data: post } = await withDbTimeout(
+            () => insforge.database.from("posts").select("*").eq("id", postId).maybeSingle(),
+            undefined,
+            "echoed post"
+          );
+          if (post) echoedPosts.push(post);
+        }
+        return res.status(200).json(echoedPosts);
+      } catch (err) {
+        console.warn("DB unavailable for echoed posts:", err.message);
+        return res.status(200).json([]);
       }
-      return res.status(200).json(echoedPosts);
     }
-
-    let query = insforge.database.from("posts").select("*");
 
     const sort = req.query.sort || "new";
-    if (sort === "trending") query = query.order("echo_count", { ascending: false });
-    else if (sort === "urgent") query = query.order("urgency_score", { ascending: false });
-    else query = query.order("created_at", { ascending: false });
-
-    if (filterType) query = query.eq("issue_type", filterType);
-    if (userId) query = query.eq("user_id", userId);
-
-    const { data, error } = await query;
-    if (error) {
-      console.warn("DB unavailable for posts:", error.message);
-      return res.status(200).json([]);
-    }
-    return res.status(200).json(Array.isArray(data) ? data : []);
+    const posts = await fetchPostsList({ sort, filterType, userId });
+    return res.status(200).json(posts);
   }
 
   if (req.method === "POST") {
@@ -130,7 +144,11 @@ export default async function handler(req, res) {
     }
 
     try {
-      const { data, error } = await insforge.database.from("posts").insert([newPost]).select().single();
+      const { data, error } = await withDbTimeout(
+        () => insforge.database.from("posts").insert([newPost]).select().single(),
+        undefined,
+        "post insert"
+      );
       if (error) throw new Error(error.message);
       return res.status(200).json(data);
     } catch (err) {
