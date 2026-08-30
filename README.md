@@ -1,260 +1,138 @@
-<div align="center">
+# Civilian
 
-<img src="https://img.shields.io/badge/Built%20for-HackASU-blue?style=for-the-badge" />
-<img src="https://img.shields.io/badge/Powered%20by-Claude%20AI-orange?style=for-the-badge" />
-<img src="https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge" />
+[![Tests](https://github.com/ARasugit20/Civilian/actions/workflows/test.yml/badge.svg)](https://github.com/ARasugit20/Civilian/actions/workflows/test.yml)
+[![Live demo](https://img.shields.io/badge/demo-gocivilian.org-2563eb)](https://gocivilian.org)
+[![Mirror](https://img.shields.io/badge/mirror-civic--app--nine.vercel.app-64748b)](https://civic-app-nine.vercel.app)
 
-# 🏛️ Civilian
+Civilian turns a resident's description of a local physical problem into a draft request for the relevant government contact. The implemented path moderates the report, asks Claude to search for official contact channels and an applicable ordinance, drafts a letter, saves the issue to InsForge, and lets the signed-in resident decide whether to send the letter through Resend.
 
-### *Your voice. Your city. Amplified by AI.*
+Evidence: the client orchestration is in [`pages/compose.js`](pages/compose.js), analysis and web-search instructions are in [`pages/api/analyze.js`](pages/api/analyze.js), persistence uses [`pages/api/posts.js`](pages/api/posts.js) and [`lib/insforge.js`](lib/insforge.js), and email delivery is in [`pages/api/send-email.js`](pages/api/send-email.js).
 
-**Civilian** is an AI-powered civic engagement platform that turns everyday frustration into formal government action — in any language, for any resident, in under 2 minutes.
+Civilian began as **CivicPulse**, a HackASU 2026 team prototype built with [Sumedha Gupta (`sgupt354`)](https://github.com/sgupt354) on upstream [`ClaudeHacks`](https://github.com/sgupt354/ClaudeHacks). I ([Aditya Ranjan](https://github.com/ARasugit20)) now maintain this repository. Team credit remains in [`pages/contact.js`](pages/contact.js) and [`pages/settings.js`](pages/settings.js).
 
-<br/>
+## Contributions
 
-[![Live Demo](https://img.shields.io/badge/🌐%20Live%20Demo-civic--app--nine.vercel.app-22c55e?style=for-the-badge)](https://civic-app-nine.vercel.app)
-[![GitHub](https://img.shields.io/badge/GitHub-ARasugit20%2FCivilian-181717?style=for-the-badge&logo=github)](https://github.com/ARasugit20/Civilian)
+Git history on `main` (63 commits): **54 by `sgupt354`, 9 by `ARasugit20`**. Current-line blame is similar for the large UI files. The table below states who primarily wrote each area and what I can defend in an interview.
 
-**Portfolio maintainer:** [Aditya Ranjan](https://github.com/ARasugit20) · **Origin:** built for [HackASU](https://github.com/sgupt354/ClaudeHacks) (team prototype), evolved into production civic app at [gocivilian.org](https://www.gocivilian.org).
+| Area | Primary author | My role |
+|---|---|---|
+| Core UI: compose, forum, landing (`pages/compose.js`, `pages/forum.js`, `pages/index.js`) | Sumedha Gupta (~91–98% of current lines) | co-maintainer; added auth gating on compose submit |
+| Claude analyze route (`pages/api/analyze.js`) | Sumedha Gupta (~95%) | extended; wired in-memory rate limit |
+| Resend email route (`pages/api/send-email.js`) | Sumedha Gupta (100%) | not mine |
+| InsForge client rename (`lib/supabase.js` → `lib/insforge.js`, commit `966a353`) | Sumedha Gupta | extended — added `upsertProfile()` and wired auth/posts ([`lib/insforge.js`](lib/insforge.js)) |
+| Google OAuth + NextAuth (`lib/auth.js`, `pages/api/auth/[...nextauth].js`) | Aditya Ranjan (100%) | author |
+| Echo deduplication (`lib/echoService.js`, `pages/api/echo.js`, `UNIQUE(post_id, user_id)` in schema) | Aditya Ranjan (~68–100%) | author |
+| Analyze rate limiter (`lib/rateLimit.js`, used in `pages/api/analyze.js`) | Aditya Ranjan (100%) | author |
+| Moderation helpers + fail-open parsing (`lib/moderation.js`, `pages/api/moderate.js`) | Aditya Ranjan (helper module); earlier moderation flow by Sumedha Gupta | refactored teammate moderation into testable helpers with fail-open behavior |
+| Vitest suite + architecture/setup docs (`tests/`, `docs/ARCHITECTURE.md`, `docs/MANUAL_SETUP.md`) | Aditya Ranjan (100%) | author |
+| Feed timeout fallback (`lib/postsFeed.js`, bounded reads in `pages/api/posts.js`) | Aditya Ranjan (100%) | author |
+| Demo seed/fixture data (`lib/civicData.js`, `scripts/seed-data.json`) | Sumedha Gupta | not mine |
 
-</div>
+**What I built or can defend in an interview**
 
----
+- Google OAuth, NextAuth session wiring, and InsForge profile upsert on sign-in ([`lib/auth.js`](lib/auth.js), [`lib/insforge.js`](lib/insforge.js), [`pages/api/auth/[...nextauth].js`](pages/api/auth/[...nextauth].js)).
+- Echo deduplication: resolve actor from session, fingerprint header, or hashed request identity; enforce one echo per post and actor ([`lib/echoService.js`](lib/echoService.js), [`pages/api/echo.js`](pages/api/echo.js), [`docs/insforge-schema.sql`](docs/insforge-schema.sql)).
+- In-memory per-IP analyze rate limiting ([`lib/rateLimit.js`](lib/rateLimit.js), [`pages/api/analyze.js`](pages/api/analyze.js)).
+- Fail-open moderation helpers extracted from the earlier route logic ([`lib/moderation.js`](lib/moderation.js), [`tests/moderation.test.js`](tests/moderation.test.js)). The intent-moderation concept and first route implementation were teammate work; I refactored and test-covered the fail-open path.
+- InsForge integration after the team rename: I did **not** perform the initial Supabase→InsForge rename; I extended the client and connected it to auth and posts ([`lib/insforge.js`](lib/insforge.js)).
+- Vitest unit tests for moderation, rate limits, echo logic, homepage stats, and feed fallback ([`tests/`](tests/)).
+- Evidence-backed portfolio README, demo script, CI workflow ([`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md), [`.github/workflows/test.yml`](.github/workflows/test.yml)).
 
-## 🧩 The Problem
+**What teammates built**
 
-> *Maria walks past the same broken streetlight every night. It's been dark for six weeks. Her neighbor's kid nearly got hit by a car last month.*
->
-> *She wants to report it — but she doesn't know who to call. She doesn't speak English fluently. She doesn't know what department handles streetlights, or how to write a formal complaint.*
->
-> *So she does nothing. The light stays broken.*
+- The original HackASU prototype, most pages, the analyze prompt and web-search flow, multilingual picker UI, community feed/map/reels, email sending, and demo fixtures ([`pages/`](pages/), [`lib/civicData.js`](lib/civicData.js)).
 
-This is the **civic participation gap**. It's not apathy — it's friction. And it hits hardest on people who are already underserved: non-English speakers, first-generation residents, anyone who's never had to navigate government bureaucracy.
+## 90-second demo script
 
-The people who need their government to listen the most are the ones least equipped to make it happen.
+The successful path creates an InsForge post before showing the result. Use a demo account and stop before **Send Letter** unless you intend to email the displayed address.
 
-**Civilian exists to close that gap.**
+**0:00–0:10 — Sign in**
 
----
+1. Open [gocivilian.org](https://gocivilian.org).
+2. Click **Sign In** in the top navigation and choose the Google account. If the compose modal appears instead, click **Continue with Google**.
+3. Click **Raise Issue**.
 
-## ✨ How It Works
+Say: “Civilian helps a resident turn a specific local problem into a government-ready request.”
 
-```
-You describe the problem  →  AI does the rest  →  Community amplifies it
-```
+**0:10–0:30 — Enter one report**
 
-**1. Describe it in plain language** — in any of 70+ languages, as casually as you want.
+Leave the language set to English and paste:
 
-**2. AI finds the right official** — Claude searches the web for the real, current responsible official in your city, looks up the actual municipal codes that apply, and writes a formal professional complaint letter on your behalf.
+> Three streetlights on Rural Road between East Lemon Street and East University Drive in Tempe have been out for three weeks. The sidewalk is dark at night. Please inspect and repair the lights.
 
-**3. Community rallies behind you** — Your issue is posted to a public feed. Neighbors who've seen the same pothole, the same broken light, the same unsafe crosswalk can echo your complaint. One voice is easy to ignore. Fifty voices from the same neighborhood is a pattern that demands a response.
+For **Location**, enter:
 
----
+> Rural Road & East Lemon Street, Tempe, Arizona
 
-## 🌍 Real World Impact
+Click **Find My Voice →**.
 
-Every complaint submitted through Civilian:
+This input is specific, observable, local, and avoids inventing an injury or incident; those are the boundaries enforced by the classifier prompt in [`pages/api/analyze.js`](pages/api/analyze.js).
 
-| What happens | Why it matters |
-|---|---|
-| Goes to a **named, real official** | Not a generic inbox that gets ignored |
-| Cites the **specific city ordinance** being violated | Officials can't claim ignorance |
-| Shows a **community echo count** | Turns individual frustration into collective pressure |
-| Is **publicly visible** | Creates transparency and accountability |
-| Can be **marked resolved** | Closes the loop — residents see results |
+**0:30–1:05 — Show the generated result**
 
-When ten people echo the same pothole report, it signals a neighborhood problem. The urgency score rises. The issue becomes harder to deprioritize.
+Say: “The app first calls the moderation route, then asks Claude to search official sources for the responsible department, contact channels, and a relevant ordinance. It drafts the request and saves the issue.”
 
----
+Point to the department, official or contact channels, ordinance when one was found, and editable letter. The actual sequence is visible in [`pages/compose.js`](pages/compose.js); contact-channel filtering is in [`pages/api/analyze.js`](pages/api/analyze.js).
 
-## ⚖️ Ethics & Fairness
+**1:05–1:20 — Show community evidence**
 
-Civilian was built with a deliberate commitment to not making existing inequalities worse.
+Open **Feed** and point to echo counts. Echo identity and deduplication are handled by [`pages/api/echo.js`](pages/api/echo.js), [`lib/echoService.js`](lib/echoService.js), and the unique database constraint in [`docs/insforge-schema.sql`](docs/insforge-schema.sql).
 
-**🌐 Language equity** — 70+ languages supported. A resident who speaks Somali, Gujarati, or Haitian Creole gets the same access as an English speaker. The language barrier is removed entirely.
+**1:20–1:30 — Close honestly**
 
-**⚖️ No bias in routing** — The AI finds officials based on location and issue type, not who the user is. A complaint from a low-income neighborhood gets the same quality letter and the same official contact as one from an affluent area.
+Say: “This is a maintained hackathon prototype, not a production-scale civic system. The core request flow is implemented; the limitations below are the next hardening work.”
 
-**🛡️ Intent-based moderation, not keyword policing** — The system understands that a frustrated resident venting about a dangerous road is not the same as someone being abusive. It asks one question: *is this message appropriate to send to a government official?* Legitimate civic frustration passes. Actual abuse doesn't.
+A longer presenter version and fallback route are in [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md).
 
-**🔒 Privacy-first posting** — Google sign-in is optional; anonymous posting still works. No PII required to raise an issue.
+## Implemented capabilities
 
-**🔓 Fail-open design** — If moderation or translation APIs are unavailable, the system defaults to allowing the complaint through. Civic participation is never silently blocked by a technical failure.
+- **Moderation before analysis:** `/compose` calls `/api/moderate` before `/api/analyze` ([`pages/compose.js`](pages/compose.js), [`pages/api/moderate.js`](pages/api/moderate.js)).
+- **Official-contact and ordinance search:** the analysis route gives Claude a web-search tool and requires official-source contact channels ([`pages/api/analyze.js`](pages/api/analyze.js)).
+- **Draft letter and editable result:** the analyzed `formal_request` is shown in an editable result view ([`pages/compose.js`](pages/compose.js)).
+- **InsForge persistence:** successful analysis is inserted into the `posts` table before the result screen appears ([`pages/compose.js`](pages/compose.js), [`pages/api/posts.js`](pages/api/posts.js), [`lib/insforge.js`](lib/insforge.js)).
+- **Optional email action:** the user must choose **Send Letter** and confirm before the Resend API route is called ([`pages/compose.js`](pages/compose.js), [`pages/api/send-email.js`](pages/api/send-email.js)).
+- **Google OAuth:** submissions currently require an authenticated NextAuth session ([`pages/compose.js`](pages/compose.js), [`components/AuthModal.js`](components/AuthModal.js), [`lib/auth.js`](lib/auth.js)).
+- **Echo deduplication:** echo actors are derived from a session, browser fingerprint, or hashed request identity and backed by `UNIQUE(post_id, user_id)` ([`pages/api/echo.js`](pages/api/echo.js), [`lib/echoService.js`](lib/echoService.js), [`docs/insforge-schema.sql`](docs/insforge-schema.sql)).
+- **PARTIAL — multilingual input:** the compose picker exposes 70+ language options and passes the selected language into analysis ([`pages/compose.js`](pages/compose.js)). The test suite does not establish equal output quality across those languages.
+- **Feed fallback:** `/api/posts` returns seeded sample posts if its bounded InsForge read fails or times out ([`pages/api/posts.js`](pages/api/posts.js), [`lib/postsFeed.js`](lib/postsFeed.js)).
 
----
+## Known limitations
 
-## 🔐 Security & reliability
+- The `/api/analyze` limiter is an in-memory, per-IP window. It is single-instance only and is not shared across serverless instances ([`lib/rateLimit.js`](lib/rateLimit.js), [`pages/api/analyze.js`](pages/api/analyze.js)).
+- Moderation intentionally fails open when the provider is unavailable or returns malformed JSON ([`pages/api/moderate.js`](pages/api/moderate.js), [`lib/moderation.js`](lib/moderation.js)).
+- Claude output is JSON-parsed and contact channels receive basic filtering, but the full response is not validated against a schema and the ordinance is not independently verified by application code ([`pages/api/analyze.js`](pages/api/analyze.js)).
+- Google sign-in is currently required to submit an issue ([`pages/compose.js`](pages/compose.js)). Anonymous-submission text elsewhere in the UI is stale.
+- Feed cards, resolved examples, and fallback records include seeded Tempe data; they are not measured deployments or verified government outcomes ([`lib/civicData.js`](lib/civicData.js), [`lib/postsFeed.js`](lib/postsFeed.js), [`scripts/seed-data.json`](scripts/seed-data.json)).
+- The tests are focused unit tests; there are no browser end-to-end or live-provider contract tests ([`tests/`](tests/)).
+- CI runs `npm test` only. It does not deploy, exercise live credentials, or prove the public sites are healthy ([`.github/workflows/test.yml`](.github/workflows/test.yml)).
 
-| Control | Implementation |
-|---|---|
-| Analyze rate limit | In-memory per-IP window on `POST /api/analyze` (default 8/min). Set `ANALYZE_RATE_LIMIT_MAX` / `ANALYZE_RATE_LIMIT_WINDOW_MS`. Use Redis/Upstash at scale. |
-| Echo deduplication | `echoes` table `UNIQUE(post_id, user_id)` + `X-Civilian-Fingerprint` / session id |
-| Moderation | Intent-based Claude Haiku; **fail-open** on outage (see `lib/moderation.js`, `tests/moderation.test.js`) |
-| Secrets | Never commit `.env.local`; see `.env.example` |
+## Production hygiene
 
-Architecture diagram: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+Present:
 
----
+- Environment-variable based service configuration in [`lib/insforge.js`](lib/insforge.js), [`lib/auth.js`](lib/auth.js), and the API routes.
+- Unit tests for moderation, rate limiting, echo logic, homepage statistics, and feed fallback in [`tests/`](tests/).
+- Request-flow documentation in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+- GitHub Actions running the unit suite on pushes and pull requests.
 
-## 🛠️ Tech Stack
+What I would build next:
 
-<div align="center">
+- Shared Redis-backed limits for every LLM route.
+- Request and model-response schema validation.
+- Consistent timeouts and typed errors across all provider and database calls.
+- Multilingual fixtures covering right-to-left scripts, mixed-language input, and malformed payloads.
+- Browser tests for sign-in, compose, result, feed, and explicit email consent.
+- Structured error reporting and alerts.
 
-| Layer | Technology |
-|---|---|
-| Framework | Next.js 16 (Pages Router) |
-| Frontend | React 19 + Tailwind CSS 4 |
-| AI — Analysis | Claude `claude-sonnet-4-6` with live web search |
-| AI — Moderation | Claude `claude-haiku-4-5` |
-| AI — Translation | Claude `claude-haiku-4-5` |
-| Database | InsForge (Postgres BaaS) |
-| Maps | Mapbox GL + react-map-gl + Leaflet |
-| Email | Resend |
-| Animation | Framer Motion + Three.js |
-| PDF Export | jsPDF |
-| Deployment | Vercel |
+## Local setup
 
-</div>
-
----
-
-## 🗺️ Pages
-
-| Page | What it does |
-|---|---|
-| `/` | Landing — hero, stats, how it works |
-| `/compose` | Raise an issue — the core AI flow |
-| `/forum` | Community feed of all issues |
-| `/map` | All issues plotted on an interactive map |
-| `/search` | Full-text search across all issues |
-| `/reels` | Short-form vertical scroll of recent issues |
-| `/post/[id]` | Single issue — details, echoes, comments |
-| `/similar` | Issues matching yours after you submit |
-| `/profile` | Your raised and echoed issues |
-
----
-
-## 🔌 API Routes
-
-| Route | Purpose |
-|---|---|
-| `POST /api/analyze` | Claude finds official, cites ordinance, writes formal letter |
-| `POST /api/moderate` | Intent-based content moderation |
-| `POST /api/translate` | Translate complaint to English |
-| `GET/POST /api/posts` | Fetch all posts or create one |
-| `GET /api/search` | Full-text search |
-| `GET /api/similar` | Posts matching issue type + location |
-| `POST /api/echo` | Upvote / echo a post |
-| `GET/POST /api/comments` | Comments on a post |
-| `POST /api/send-email` | Send formal complaint to official via Resend |
-| `POST /api/resolve` | Mark issue as resolved |
-
----
-
-## 🚀 Local Setup
-
-### Prerequisites
-
-- Node.js 18+
-- [Anthropic API key](https://console.anthropic.com/)
-- [InsForge](https://insforge.app) project
-- [Resend](https://resend.com) API key
-- [Mapbox](https://mapbox.com) token
-
-### Install & Run
+Requirements and environment-variable names are documented in [`docs/MANUAL_SETUP.md`](docs/MANUAL_SETUP.md).
 
 ```bash
-git clone https://github.com/ARasugit20/Civilian.git
-cd Civilian
 npm install
-```
-
-Create `.env.local` (see `.env.example` and [`docs/MANUAL_SETUP.md`](docs/MANUAL_SETUP.md)):
-
-```env
-NEXT_PUBLIC_INSFORGE_BASE_URL=https://your-project.insforge.app
-NEXT_PUBLIC_INSFORGE_ANON_KEY=your_insforge_anon_key
-ANTHROPIC_API_KEY=your_anthropic_key
-RESEND_API_KEY=your_resend_key
-NEXT_PUBLIC_MAPBOX_TOKEN=your_mapbox_token
-NEXTAUTH_URL=http://localhost:3000
-NEXTAUTH_SECRET=generate_a_random_string
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-```
-
-```bash
 npm run dev
-# open http://localhost:3000
-npm run test    # vitest — moderation, echo, stats
+npm test
 npm run build
 ```
 
-### Database Schema
-
-```sql
-create table posts (
-  id            uuid primary key default gen_random_uuid(),
-  complaint     text,
-  formal_request text,
-  department    text,
-  official_name text,
-  official_email text,
-  issue_type    text,
-  location      text,
-  urgency_score int,
-  echo_count    int default 0,
-  resolved      boolean default false,
-  created_at    timestamptz default now()
-);
-```
-
-Seed demo data:
-
-```bash
-node scripts/seed.js
-```
-
----
-
-## 📁 Project Structure
-
-```
-civic-app/
-├── pages/
-│   ├── index.js          # Landing page
-│   ├── compose.js        # Raise an issue (core AI flow)
-│   ├── forum.js          # Community feed
-│   ├── map.js            # Issues map
-│   ├── search.js         # Search
-│   ├── reels.js          # Issue reels
-│   ├── profile.js        # User profile
-│   ├── post/[id].js      # Single issue
-│   ├── similar.js        # Similar issues
-│   └── api/              # All API routes
-├── components/
-│   ├── Nav.js
-│   └── Toast.js
-├── lib/
-│   ├── insforge.js       # Database client + profile upsert
-│   ├── auth.js            # NextAuth (Google)
-│   ├── moderation.js      # Intent moderation helpers
-│   ├── rateLimit.js       # Analyze rate limiting
-│   └── homeStats.js       # Homepage aggregates
-├── tests/                 # vitest unit tests
-├── docs/
-│   ├── ARCHITECTURE.md
-│   └── MANUAL_SETUP.md
-└── styles/
-    └── globals.css
-```
-
----
-
-<div align="center">
-
-Built for **HackASU** · maintained by **Aditya Ranjan** as a portfolio piece.
-
-*Every resident deserves to have their voice heard by the right person, in the right format, with their community behind them.*
-
-</div>
+The app is Next.js Pages Router with React; see [`package.json`](package.json) and [`pages/`](pages/). The database schema is in [`docs/insforge-schema.sql`](docs/insforge-schema.sql).
