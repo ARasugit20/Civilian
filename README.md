@@ -8,7 +8,39 @@ Civilian turns a resident's description of a local physical problem into a draft
 
 Evidence: the client orchestration is in [`pages/compose.js`](pages/compose.js), analysis and web-search instructions are in [`pages/api/analyze.js`](pages/api/analyze.js), persistence uses [`pages/api/posts.js`](pages/api/posts.js) and [`lib/insforge.js`](lib/insforge.js), and email delivery is in [`pages/api/send-email.js`](pages/api/send-email.js).
 
-Civilian began as a HackASU 2026 team prototype and is now maintained by Aditya Ranjan. The repository records the team origin in [`pages/contact.js`](pages/contact.js) and the HackASU track/source link in [`pages/settings.js`](pages/settings.js).
+Civilian began as **CivicPulse**, a HackASU 2026 team prototype built with [Sumedha Gupta (`sgupt354`)](https://github.com/sgupt354) on upstream [`ClaudeHacks`](https://github.com/sgupt354/ClaudeHacks). I ([Aditya Ranjan](https://github.com/ARasugit20)) now maintain this repository. Team credit remains in [`pages/contact.js`](pages/contact.js) and [`pages/settings.js`](pages/settings.js).
+
+## Contributions
+
+Git history on `main` (63 commits): **54 by `sgupt354`, 9 by `ARasugit20`**. Current-line blame is similar for the large UI files. The table below states who primarily wrote each area and what I can defend in an interview.
+
+| Area | Primary author | My role |
+|---|---|---|
+| Core UI: compose, forum, landing (`pages/compose.js`, `pages/forum.js`, `pages/index.js`) | Sumedha Gupta (~91–98% of current lines) | co-maintainer; added auth gating on compose submit |
+| Claude analyze route (`pages/api/analyze.js`) | Sumedha Gupta (~95%) | extended; wired in-memory rate limit |
+| Resend email route (`pages/api/send-email.js`) | Sumedha Gupta (100%) | not mine |
+| InsForge client rename (`lib/supabase.js` → `lib/insforge.js`, commit `966a353`) | Sumedha Gupta | extended — added `upsertProfile()` and wired auth/posts ([`lib/insforge.js`](lib/insforge.js)) |
+| Google OAuth + NextAuth (`lib/auth.js`, `pages/api/auth/[...nextauth].js`) | Aditya Ranjan (100%) | author |
+| Echo deduplication (`lib/echoService.js`, `pages/api/echo.js`, `UNIQUE(post_id, user_id)` in schema) | Aditya Ranjan (~68–100%) | author |
+| Analyze rate limiter (`lib/rateLimit.js`, used in `pages/api/analyze.js`) | Aditya Ranjan (100%) | author |
+| Moderation helpers + fail-open parsing (`lib/moderation.js`, `pages/api/moderate.js`) | Aditya Ranjan (helper module); earlier moderation flow by Sumedha Gupta | refactored teammate moderation into testable helpers with fail-open behavior |
+| Vitest suite + architecture/setup docs (`tests/`, `docs/ARCHITECTURE.md`, `docs/MANUAL_SETUP.md`) | Aditya Ranjan (100%) | author |
+| Feed timeout fallback (`lib/postsFeed.js`, bounded reads in `pages/api/posts.js`) | Aditya Ranjan (100%) | author |
+| Demo seed/fixture data (`lib/civicData.js`, `scripts/seed-data.json`) | Sumedha Gupta | not mine |
+
+**What I built or can defend in an interview**
+
+- Google OAuth, NextAuth session wiring, and InsForge profile upsert on sign-in ([`lib/auth.js`](lib/auth.js), [`lib/insforge.js`](lib/insforge.js), [`pages/api/auth/[...nextauth].js`](pages/api/auth/[...nextauth].js)).
+- Echo deduplication: resolve actor from session, fingerprint header, or hashed request identity; enforce one echo per post and actor ([`lib/echoService.js`](lib/echoService.js), [`pages/api/echo.js`](pages/api/echo.js), [`docs/insforge-schema.sql`](docs/insforge-schema.sql)).
+- In-memory per-IP analyze rate limiting ([`lib/rateLimit.js`](lib/rateLimit.js), [`pages/api/analyze.js`](pages/api/analyze.js)).
+- Fail-open moderation helpers extracted from the earlier route logic ([`lib/moderation.js`](lib/moderation.js), [`tests/moderation.test.js`](tests/moderation.test.js)). The intent-moderation concept and first route implementation were teammate work; I refactored and test-covered the fail-open path.
+- InsForge integration after the team rename: I did **not** perform the initial Supabase→InsForge rename; I extended the client and connected it to auth and posts ([`lib/insforge.js`](lib/insforge.js)).
+- Vitest unit tests for moderation, rate limits, echo logic, homepage stats, and feed fallback ([`tests/`](tests/)).
+- Evidence-backed portfolio README, demo script, CI workflow ([`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md), [`.github/workflows/test.yml`](.github/workflows/test.yml)).
+
+**What teammates built**
+
+- The original HackASU prototype, most pages, the analyze prompt and web-search flow, multilingual picker UI, community feed/map/reels, email sending, and demo fixtures ([`pages/`](pages/), [`lib/civicData.js`](lib/civicData.js)).
 
 ## 90-second demo script
 
