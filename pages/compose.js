@@ -457,7 +457,11 @@ export default function Compose() {
       });
       if (!saveRes.ok) {
         const saveErr = await saveRes.json().catch(() => ({}));
-        throw new Error(saveErr.message || "Your complaint could not be saved right now. Please try again. Your text has not been lost.");
+        const saveMsg =
+          saveErr.detail ||
+          saveErr.message ||
+          "Your complaint could not be saved right now. Please try again. Your text has not been lost.";
+        throw new Error(saveMsg);
       }
       const saved = await saveRes.json();
       setResult({ ...analyzed, id: saved.id });

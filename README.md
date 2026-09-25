@@ -62,6 +62,7 @@ That is the product. The stack exists to deliver that outcome.
 
 - [x] Secrets in env vars only — see [`.env.example`](.env.example); never commit `.env.local`
 - [x] InsForge client uses `NEXT_PUBLIC_INSFORGE_BASE_URL` + `NEXT_PUBLIC_INSFORGE_ANON_KEY` ([`lib/insforge.js`](lib/insforge.js))
+- [x] Deployment check: `GET /api/health` (InsForge env + live `posts` read); set vars in Vercel and **redeploy**; run [`docs/insforge-schema.sql`](docs/insforge-schema.sql) if inserts fail on missing columns
 - [x] Analyze rate limit per IP ([`lib/rateLimit.js`](lib/rateLimit.js))
 - [x] Echo deduplication via `UNIQUE(post_id, user_id)` + fingerprint header
 - [x] Intent-based moderation with fail-open ([`lib/moderation.js`](lib/moderation.js))
