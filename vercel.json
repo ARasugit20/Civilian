@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "pages/api/posts.js": {
+      "maxDuration": 10
+    }
+  }
+}

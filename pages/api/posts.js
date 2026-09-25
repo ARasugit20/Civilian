@@ -1,15 +1,30 @@
 import { auth } from "../../lib/auth";
 import { insforge } from "../../lib/insforge";
+import { isInsforgeConfigured } from "../../lib/insforgeEnv";
 import {
   FALLBACK_POSTS,
   withDbTimeout,
   resolveFeedPosts,
+  DB_WRITE_TIMEOUT_MS,
 } from "../../lib/postsFeed";
 
+const GEOCODE_TIMEOUT_MS = 2500;
+
+function geocodeQueryForLocation(location) {
+  const trimmed = String(location || "").trim() || "Tempe, Arizona";
+  const lower = trimmed.toLowerCase();
+  if (lower.includes("tempe") || lower.includes("arizona") || lower.includes(", az")) {
+    return trimmed;
+  }
+  return `${trimmed}, Tempe, Arizona`;
+}
+
 async function geocodeLocation(location) {
-  try {
-    const query = encodeURIComponent(`${location}, Tempe, Arizona`);
-    const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+  const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+  if (!token) return { lat: null, lng: null };
+
+  const geocodeTask = async () => {
+    const query = encodeURIComponent(geocodeQueryForLocation(location));
     const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${query}.json?access_token=${token}&limit=1&country=US`;
     const res = await fetch(url);
     const data = await res.json();
@@ -17,10 +32,35 @@ async function geocodeLocation(location) {
       const [lng, lat] = data.features[0].center;
       return { lat, lng };
     }
+    return { lat: null, lng: null };
+  };
+
+  try {
+    return await Promise.race([
+      geocodeTask(),
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Geocoding timed out")), GEOCODE_TIMEOUT_MS);
+      }),
+    ]);
   } catch (e) {
-    console.error("Geocoding failed:", e);
+    console.warn("Geocoding skipped:", e.message || e);
+    return { lat: null, lng: null };
   }
-  return { lat: null, lng: null };
+}
+
+function saveFailedResponse(res, err, newPost) {
+  console.error("DB save failed:", err, { postKeys: Object.keys(newPost) });
+  const body = {
+    error: "save_failed",
+    message:
+      "Your complaint could not be saved right now. Please try again. Your text has not been lost.",
+  };
+  const previewDebug =
+    process.env.VERCEL_ENV === "preview" && process.env.DEBUG_ERRORS === "1";
+  if (process.env.NODE_ENV !== "production" || previewDebug) {
+    body.detail = err?.message || String(err);
+  }
+  return res.status(503).json(body);
 }
 
 async function fetchPostsList({ sort, filterType, userId }) {
@@ -143,20 +183,26 @@ export default async function handler(req, res) {
       newPost.user_avatar = session.user.image || null;
     }
 
+    if (!isInsforgeConfigured()) {
+      return saveFailedResponse(
+        res,
+        new Error(
+          "InsForge is not configured. Set NEXT_PUBLIC_INSFORGE_BASE_URL and NEXT_PUBLIC_INSFORGE_ANON_KEY, then redeploy."
+        ),
+        newPost
+      );
+    }
+
     try {
       const { data, error } = await withDbTimeout(
         () => insforge.database.from("posts").insert([newPost]).select().single(),
-        undefined,
+        DB_WRITE_TIMEOUT_MS,
         "post insert"
       );
       if (error) throw new Error(error.message);
       return res.status(200).json(data);
     } catch (err) {
-      console.error("DB save failed:", err.message);
-      return res.status(503).json({
-        error: "save_failed",
-        message: "Your complaint could not be saved right now. Please try again. Your text has not been lost.",
-      });
+      return saveFailedResponse(res, err, newPost);
     }
   }
 
