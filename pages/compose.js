@@ -4,6 +4,28 @@ import { useRouter } from "next/router";
 import { useSession } from "next-auth/react";
 import Nav from "../components/Nav";
 import AuthModal from "../components/AuthModal";
+import { FALLBACK_POSTS } from "../lib/postsFeed";
+
+const POSTS_PANEL_FETCH_MS = 6000;
+
+function postsForSidebar(raw) {
+  if (Array.isArray(raw) && raw.length > 0) return raw;
+  return FALLBACK_POSTS;
+}
+
+function sidebarStatsFromPosts(posts) {
+  return {
+    total: posts.length,
+    contacted: posts.filter((p) => p.official_email).length,
+    voices: posts.reduce((s, p) => s + (Number(p.echo_count) || 0), 0),
+  };
+}
+
+function recentFromPosts(posts) {
+  return [...posts]
+    .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+    .slice(0, 3);
+}
 
 const LOADING_STEPS = [
   { text: "Reading your complaint...",      color: "#6366f1" },
@@ -229,20 +251,32 @@ function primaryEmailFromChannels(contact_channels) {
 function RightPanel() {
   const [stats, setStats] = useState(null);
   const [recent, setRecent] = useState([]);
+  const [panelReady, setPanelReady] = useState(false);
 
   useEffect(() => {
-    fetch("/api/posts")
-      .then(r => r.json())
-      .then(posts => {
-        if (!Array.isArray(posts)) return;
-        setStats({
-          total: posts.length,
-          contacted: posts.filter(p => p.official_email).length,
-          voices: posts.reduce((s, p) => s + (Number(p.echo_count) || 0), 0),
-        });
-        setRecent([...posts].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 3));
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), POSTS_PANEL_FETCH_MS);
+
+    function applyPanel(posts) {
+      const list = postsForSidebar(posts);
+      setStats(sidebarStatsFromPosts(list));
+      setRecent(recentFromPosts(list));
+      setPanelReady(true);
+    }
+
+    fetch("/api/posts?sort=new", { signal: controller.signal })
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
       })
-      .catch(() => {});
+      .then((posts) => applyPanel(posts))
+      .catch(() => applyPanel(FALLBACK_POSTS))
+      .finally(() => clearTimeout(timeoutId));
+
+    return () => {
+      clearTimeout(timeoutId);
+      controller.abort();
+    };
   }, []);
 
   return (
@@ -268,7 +302,12 @@ function RightPanel() {
       <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 16, padding: "20px" }}>
         <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: "var(--muted)", marginBottom: 14 }}>Recent issues</p>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {recent.length === 0 && <p style={{ fontSize: 12, color: "var(--muted)" }}>Loading...</p>}
+          {!panelReady && recent.length === 0 && (
+            <p style={{ fontSize: 12, color: "var(--muted)" }}>Loading...</p>
+          )}
+          {panelReady && recent.length === 0 && (
+            <p style={{ fontSize: 12, color: "var(--muted)" }}>No issues yet — yours could be first.</p>
+          )}
           {recent.map(p => (
             <Link key={p.id} href={`/post/${p.id}`} style={{ display: "flex", alignItems: "flex-start", gap: 10, textDecoration: "none" }}>
               <div style={{ width: 8, height: 8, borderRadius: "50%", background: TYPE_COLORS[p.issue_type] || "#94a3b8", flexShrink: 0, marginTop: 5 }} />
@@ -380,11 +419,6 @@ export default function Compose() {
       hasError = true;
     }
     if (hasError) return;
-
-    if (status !== "authenticated") {
-      setShowAuth(true);
-      return;
-    }
 
     // Show loading only after validation passes
     setLoading(true);
@@ -700,6 +734,28 @@ export default function Compose() {
                 <span style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.5 }}>{text}</span>
               </div>
             ))}
+
+            {status !== "authenticated" && (
+              <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 12, lineHeight: 1.5 }}>
+                Optional:{" "}
+                <button
+                  type="button"
+                  onClick={() => setShowAuth(true)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    color: "#2563eb",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    fontSize: 12,
+                  }}
+                >
+                  Sign in
+                </button>{" "}
+                to attach issues to your profile.
+              </p>
+            )}
 
             {/* High sensitivity toggle */}
             <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
